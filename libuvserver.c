@@ -31,6 +31,7 @@ void alloc_new_buff(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
 void after_write(uv_write_t *req, int status) {
   if (status) {
     fprintf(stderr, "Write error occured%s\n", uv_strerror(status));
+    exit(0);
   }
   free_write_req(req); // free the req struct
 }
@@ -51,6 +52,7 @@ void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   if (nread < 0) {
     if (nread != UV_EOF) {
       fprintf(stderr, "Read error: %s\n", uv_err_name(nread));
+      exit(0);
     }
     uv_close((uv_handle_t *)client, NULL);
   }
@@ -60,7 +62,7 @@ void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
 void on_connection(uv_stream_t *server, int status) {
   if (status < 0) {
     fprintf(stderr, "New connection error %s\n", uv_strerror(status));
-    return;
+    exit(0);
   }
 
   context *ctx = server->data;
