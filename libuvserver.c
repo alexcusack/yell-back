@@ -1,16 +1,14 @@
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <uv.h>
 
 #define DEFAULT_HOST "127.0.0.1"
 #define DEFAULT_PORT 8000
 #define DEFAULT_BACKLOG 128
 
-uv_loop_t *loop;
-
-struct sockaddr_in addr;
+typedef struct { uv_loop_t *loop; } context;
 
 typedef struct {
   uv_write_t req;
@@ -18,7 +16,7 @@ typedef struct {
 } write_req_t;
 
 void free_write_req(uv_write_t *req) {
-  write_req_t *wr = (write_req_t*) req;
+  write_req_t *wr = (write_req_t *)req;
   // free the buffer
   free(wr->buf.base);
   // free the pointer
@@ -26,7 +24,7 @@ void free_write_req(uv_write_t *req) {
 }
 
 void alloc_new_buff(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
-  buf->base = (char*) malloc(suggested_size); // char pointer to malloced buffer
+  buf->base = (char *)malloc(suggested_size); // char pointer to malloced buffer
   buf->len = suggested_size; // save buffer length as part of the struct
 }
 
@@ -45,16 +43,16 @@ void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
     for (int i = 0; i < nread; ++i) {
       uppercased[i] = toupper(buf->base[i]);
     }
-    write_req_t *req = (write_req_t*) malloc(sizeof(write_req_t));
+    write_req_t *req = (write_req_t *)malloc(sizeof(write_req_t));
     req->buf = uv_buf_init(uppercased, nread);
-    uv_write((uv_write_t*) req, client, &req->buf, 1, after_write);
+    uv_write((uv_write_t *)req, client, &req->buf, 1, after_write);
     return;
   }
   if (nread < 0) {
     if (nread != UV_EOF) {
       fprintf(stderr, "Read error: %s\n", uv_err_name(nread));
     }
-    uv_close((uv_handle_t*) client, NULL);
+    uv_close((uv_handle_t *)client, NULL);
   }
   free(buf->base);
 }
@@ -65,32 +63,50 @@ void on_connection(uv_stream_t *server, int status) {
     return;
   }
 
-  // allocate a client, init an event loop for it, start reading
-  uv_tcp_t *client = (uv_tcp_t*) malloc(sizeof(uv_tcp_t));
-  uv_tcp_init(loop, client);
-  if (uv_accept(server, (uv_stream_t*) client) == 0) {
-    uv_read_start((uv_stream_t*) client, alloc_new_buff, echo_read);
+  context *ctx = server->data;
+
+  // allocate a client, add it to the loop, start reading
+  uv_tcp_t *client = malloc(sizeof(*client));
+  uv_tcp_init(ctx->loop, client);
+  if (uv_accept(server, (uv_stream_t *)client) == 0) {
+    uv_read_start((uv_stream_t *)client, alloc_new_buff, echo_read);
   } else {
-    uv_close((uv_handle_t*) client, NULL);
+    uv_close((uv_handle_t *)client, NULL);
   }
 }
 
 int main() {
-  loop = uv_default_loop();
+  // "context" struct, share refs between fn calls by pointing handler's
+  // .data to the address of this struct. add to this stuct anything that
+  // must be shared
+  context ctx;
 
+  // make loop
+  uv_loop_t *loop = uv_default_loop();
+  ctx.loop = loop;
+
+  // make server handler
   uv_tcp_t server;
   uv_tcp_init(loop, &server);
 
-  uv_ip4_addr(DEFAULT_HOST, DEFAULT_PORT, &addr);
+  // ensure server handler can use context struct
+  server.data = &ctx;
 
-  uv_tcp_bind(&server, (const struct sockaddr*)&addr, 0);
+  // set host & port on server
+  struct sockaddr addr;
+  uv_ip4_addr(DEFAULT_HOST, DEFAULT_PORT, (struct sockaddr_in *)&addr);
+  uv_tcp_bind(&server, &addr, 0);
 
-  int r = uv_listen((uv_stream_t*) &server, DEFAULT_BACKLOG, on_connection);
+  // register connection callback for server
+  int r = uv_listen((uv_stream_t *)&server, DEFAULT_BACKLOG, on_connection);
 
   if (r) {
     fprintf(stderr, "Listen error %s\n", uv_strerror(r));
     return 1;
   }
 
-  return uv_run(loop, UV_RUN_DEFAULT);
+  // start loop
+  uv_run(loop, UV_RUN_DEFAULT);
+
+  // we never get here, main never returns
 }
