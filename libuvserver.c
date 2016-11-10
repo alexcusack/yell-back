@@ -48,7 +48,6 @@ void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
     write_req_t *req = (write_req_t*) malloc(sizeof(write_req_t));
     req->buf = uv_buf_init(uppercased, nread);
     uv_write((uv_write_t*) req, client, &req->buf, 1, after_write);
-    uv_close((uv_handle_t*) client, NULL); // REMOVE THIS TO KEEP CLIENT STREAM OPEN
     return;
   }
   if (nread < 0) {
@@ -59,7 +58,6 @@ void echo_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf) {
   }
   free(buf->base);
 }
-
 
 void on_connection(uv_stream_t *server, int status) {
   if (status < 0) {
@@ -76,7 +74,6 @@ void on_connection(uv_stream_t *server, int status) {
     uv_close((uv_handle_t*) client, NULL);
   }
 }
-
 
 int main() {
   loop = uv_default_loop();
