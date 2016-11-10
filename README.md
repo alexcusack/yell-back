@@ -10,7 +10,7 @@ $ brew install libuv
 $ make
 $ ./libuvserver
 ```
-In  a separate sessions
+In  a separate session
 ```
 $ nc 127.0.0.1 8000
 > hello
